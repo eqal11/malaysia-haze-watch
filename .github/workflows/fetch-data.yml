@@ -2,7 +2,12 @@ name: Refresh environmental data
 
 on:
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '11,41 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-data.yml'
+      - 'scripts/**'
   workflow_dispatch:
 
 permissions:
@@ -34,13 +39,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-context.txt
+
+      - name: Install GIS attribution dependencies
+        run: python -m pip install -r scripts/requirements-context.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test existing functions and land context
+        run: |
+          node tests/test.mjs
+          node tests/history.mjs
+          node tests/land-context.mjs
+          node tests/live.mjs
+          python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Fetch latest environmental data
         id: fetch
         continue-on-error: true
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
-        run: python scripts/update.py
+        run: python scripts/refresh_live.py
 
       - name: Validate data
         run: python scripts/validate_data.py
@@ -60,7 +82,7 @@ jobs:
       - name: Prepare website
         run: |
           mkdir _site
-          cp index.html LICENSE README.md _site/
+          cp index.html LICENSE *.md _site/
           cp -r css js data assets _site/
 
       - uses: actions/upload-pages-artifact@v3
