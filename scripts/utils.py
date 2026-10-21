@@ -19,6 +19,8 @@ def read(path, default=None):
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n'
+    if path.resolve().is_relative_to(DATA.resolve()) and len(content.encode('utf8'))>=5_000_000:
+        raise ValueError('Data output exceeds 5 MB; last good file retained')
     if path.exists() and path.read_text(encoding='utf-8') == content:
         return
     temp = path.with_suffix(path.suffix + '.tmp')

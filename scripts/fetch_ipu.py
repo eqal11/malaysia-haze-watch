@@ -47,6 +47,8 @@ def main():
         doc['stations'] = sorted(merged.values(),key=lambda s:s['id'])
         validate_ipu(doc)
         observed = max(s['updated_at'] for s in doc['stations'])
+        if datetime.now(timezone.utc)-datetime.fromisoformat(observed.replace('Z','+00:00'))>timedelta(hours=3):
+            raise ValueError('DOE latest observation is older than three hours')
         doc['updated_at'] = observed
         history = previous.get('history', [])
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
@@ -66,4 +68,4 @@ def main():
         return False
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(0 if main() else 1)

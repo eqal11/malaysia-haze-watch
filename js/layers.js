@@ -1,10 +1,11 @@
+import {contextPopup} from './land-context.js';
 import {CONFIG} from './config.js';
 import {category,distance,numeric,stateMatches,usableStations,risk} from './core.js';
 import {idw} from './idw.js';
 import {prepare,contains,interiorPoint} from './geometry.js';
 import {t,lang,time,esc} from './i18n.js';
 export function districtValues(features,stations,options){
-  const available=usableStations(stations);
+  const available=usableStations(stations,options.referenceMs??Date.now());
   return features.map(f=>{
     const local=available.filter(s=>contains([s.lng,s.lat],f.geometry)).sort((a,b)=>b.ipu-a.ipu);
     const center=interiorPoint(f),near=available.filter(s=>distance(s,center)<=options.radiusKm);
@@ -12,9 +13,9 @@ export function districtValues(features,stations,options){
     return {...f,center,ipu:value,measured:!!chosen,station:chosen,contributors:chosen?[chosen]:near,updated_at:chosen?.updated_at||(near.length?near.map(s=>s.updated_at).sort()[0]:null)};
   });
 }
-function popup(d){const c=category(d.ipu),pollutants=[...new Set(d.contributors?.map(s=>s.pollutant).filter(Boolean)||[])];return `<h3>${esc(d.properties?.name||d.name)}</h3><div class="popup-value">${numeric(d.ipu)?Math.round(d.ipu):'—'} <small>IPU</small></div><b>${c?esc(c[lang]):t('unavailable')}</b><p><span class="popup-tag">${d.measured?t('measured'):t('estimated')}</span></p><p class="popup-meta">${t('pollutant')}: ${esc(pollutants.join(', ')||d.pollutant||t('unknown'))}${!d.measured&&pollutants.length?' (stesen sumber / source stations)':''}<br>${t('updated')}: ${esc(time(d.updated_at))}${d.station?'<br>'+esc(d.station.name):''}</p>${c?`<div class="popup-advice"><b>${t('advice')}</b><br>${esc(c.advice)}</div>`:`<p>${t('noNearby')}</p>`}${d.measured&&d.contributors?.length===1?'<p class="popup-meta">Nilai stesen dalam daerah; bukan purata seluruh daerah.</p>':''}`;}
-export function hotspotFilter(features,{state,region,hours},now=Date.now()){
- return features.filter(f=>{const p=f.properties,age=(now-Date.parse(p.time))/3600000;return age>=-.25&&age<=hours&&(!region||p.region===region||p.country===region)&&(!state||p.country==='Malaysia'&&stateMatches(p.state,state));});
+function popup(d){const c=category(d.ipu),pollutants=[...new Set(d.contributors?.map(s=>s.pollutant).filter(Boolean)||[])];return `<h3>${esc(d.properties?.name||d.name)}</h3><div class="popup-value">${numeric(d.ipu)?Math.round(d.ipu):'N/A'} <small>IPU</small></div><b>${c?esc(c[lang]):t('unavailable')}</b><p><span class="popup-tag">${d.measured?t('measured'):t('estimated')}</span></p><p class="popup-meta">${t('pollutant')}: ${esc(pollutants.join(', ')||d.pollutant||t('unknown'))}${!d.measured&&pollutants.length?' (stesen sumber / source stations)':''}<br>${t('updated')}: ${esc(time(d.updated_at))}${d.station?'<br>'+esc(d.station.name):''}</p>${c?`<div class="popup-advice"><b>${t('advice')}</b><br>${esc(c.advice)}</div>`:`<p>${t('noNearby')}</p>`}${d.measured&&d.contributors?.length===1?'<p class="popup-meta">Nilai stesen dalam daerah; bukan purata seluruh daerah.</p>':''}${d.properties?.boundary_note?`<p class="popup-meta">${esc(d.properties.boundary_note)}</p>`:''}`;}
+export function hotspotFilter(features,{state,region,hours,peatOnly=false},now=Date.now()){
+ return features.filter(f=>{const p=f.properties,age=(now-Date.parse(p.time))/3600000;return (!peatOnly||p.on_peat===true)&&age>=0&&age<=hours&&(!region||p.region===region||p.country===region)&&(!state||p.country==='Malaysia'&&stateMatches(p.state,state));});
 }
 const merc=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));
 function pmColor(v){const stops=[[0,[210,239,231]],[15,[111,191,173]],[35,[244,208,113]],[75,[219,119,76]],[150,[148,62,102]]];let a=stops[0],b=stops.at(-1);for(let i=1;i<stops.length;i++)if(v<=stops[i][0]){a=stops[i-1];b=stops[i];break;}const w=Math.max(0,Math.min(1,(v-a[0])/(b[0]-a[0])));return a[1].map((n,i)=>Math.round(n+(b[1][i]-n)*w));}
@@ -34,24 +35,25 @@ function rasterImage(part,features,kind){
 }
 export class Layers{
   constructor(map,onStatus,onSelect){this.map=map;this.status=onStatus;this.select=onSelect;this.groups={};this.jobs=0;this.active={districts:true,stations:true,pm:false,ipuGrid:false,hotspots:true,wind:false};this.rasterToken={};}
-  clear(key){if(this.groups[key]){this.map.removeLayer(this.groups[key]);delete this.groups[key];}}
-  async render(model){this.model=model;const {districts,stations,hotspots,pm,wind,state,options}=model;
+  clear(key){this.rasterToken[key]=++this.jobs;if(this.groups[key]){this.map.removeLayer(this.groups[key]);delete this.groups[key];}}
+  async render(model){if(this.model?.historical!==model.historical||model.historical&&this.model?.referenceMs!==model.referenceMs){this.map.closePopup?.();document.getElementById('cv').textContent=t('unavailable');}this.model=model;const {districts,stations,hotspots,pm,wind,state,options}=model;const referenceMs=model.referenceMs??Date.now();
     for(const key of Object.keys(this.active))if(!this.active[key]){this.clear(key);this.rasterToken[key]=++this.jobs;this.status(key,'');}
     if(this.active.districts){this.clear('districts');if(!districts?.length)this.status('districts',t('unavailable'));else{
       this.groups.districts=L.geoJSON(districts,{style:f=>{const c=category(f.ipu);return {color:'#698578',weight:.65,fillColor:c?.color||'#bfc8c4',fillOpacity:c?(f.measured?.49:.20):.15,dashArray:f.measured?null:'2 2'};},onEachFeature:(f,l)=>{l.bindPopup(popup(f));l.on('mouseover',()=>l.setStyle({weight:2}));l.on('mouseout',()=>l.setStyle({weight:.65}));}}).addTo(this.map);this.status('districts',`${districts.filter(d=>numeric(d.ipu)).length}/${districts.length} · ${t('layersNote')}`);}}
     if(this.active.stations){this.clear('stations');if(!stations?.length)this.status('stations',t('empty'));else{
-      this.groups.stations=L.layerGroup(stations.map(s=>{const c=category(s.ipu);const stale=Date.now()-Date.parse(s.updated_at)>CONFIG.stationMaxAgeHours*3600000;return L.circleMarker([s.lat,s.lng],{radius:5.5,color:stale?'#777':'#fff',weight:1.7,fillColor:c?.color||'#a1aaa5',fillOpacity:stale?.35:1}).bindPopup(popup({...s,measured:true,contributors:[s]})+(stale?`<p>${t('stale')}</p>`:'')).on('click',()=>this.select(s.id));})).addTo(this.map);this.status('stations',`${stations.length} · DOE / JAS`);}}
+      this.groups.stations=L.layerGroup(stations.map(s=>{const c=category(s.ipu);const stale=referenceMs-Date.parse(s.updated_at)>CONFIG.stationMaxAgeHours*3600000;return L.circleMarker([s.lat,s.lng],{radius:5.5,color:stale?'#777':'#fff',weight:1.7,fillColor:c?.color||'#a1aaa5',fillOpacity:stale?.35:1}).bindPopup(popup({...s,measured:true,contributors:[s]})+(stale?`<p>${t('stale')}</p>`:'')).on('click',()=>this.select(s.id));})).addTo(this.map);this.status('stations',`${stations.length} · DOE / JAS`);}}
     if(this.active.hotspots){this.clear('hotspots');if(!hotspots)this.status('hotspots',t('unavailable'));else{
-      this.groups.hotspots=L.layerGroup(hotspots.map(f=>{const p=f.properties,r=risk(p),color={high:'#ba3e32',medium:'#d58332',low:'#a89958'}[r];return L.circleMarker([f.geometry.coordinates[1],f.geometry.coordinates[0]],{radius:{high:7,medium:4.5,low:3}[r],fillColor:color,color:'#fff',weight:.8,fillOpacity:.85}).bindPopup(`<h3>VIIRS S-NPP · ${t(r==='high'?'riskHigh':r==='medium'?'riskMedium':'riskLow')}</h3><p>${esc(p.country)} · ${esc(p.region)}<br>FRP: ${esc(p.frp)} MW<br>Confidence: ${esc(p.confidence)}<br>${esc(time(p.time))}</p><p class="popup-meta">NASA FIRMS · Detection ≠ confirmed fire impact</p>`);})).addTo(this.map);this.status('hotspots',hotspots.length?`${hotspots.length} · VIIRS S-NPP`:t('empty'));}}
+      this.groups.hotspots=L.layerGroup(hotspots.map(f=>{const p=f.properties,r=risk(p),color={high:'#ba3e32',medium:'#d58332',low:'#a89958'}[r];return L.circleMarker([f.geometry.coordinates[1],f.geometry.coordinates[0]],{radius:{high:7,medium:4.5,low:3}[r],fillColor:color,color:'#fff',weight:.8,fillOpacity:.85}).bindPopup(`<h3>VIIRS S-NPP · ${t(r==='high'?'riskHigh':r==='medium'?'riskMedium':'riskLow')}</h3><p>${esc(p.country||t('noContext'))} · ${esc(p.region||t('noContext'))}<br>FRP: ${esc(p.frp)} MW<br>Confidence: ${esc(p.confidence)}<br>${esc(time(p.time))}</p>${contextPopup(p)}<p class="popup-meta">NASA FIRMS · ${t('heatOnly')}</p>`);})).addTo(this.map);this.status('hotspots',hotspots.length?`${hotspots.length} · VIIRS S-NPP`:t('empty'));}}
     if(this.active.wind){this.clear('wind');if(!wind?.length)this.status('wind',t('unavailable'));else{try{const token=++this.jobs;this.rasterToken.wind=token;const {makeWindLayer}=await import('./wind.js');if(this.rasterToken.wind!==token||!this.active.wind)return;this.groups.wind=makeWindLayer(this.map,wind).addTo(this.map);this.status('wind',`${wind.length} · ${t('wind')}`);}catch{this.status('wind',t('unavailable'));}}}
     for(const kind of ['pm','ipuGrid'])if(this.active[kind]){
-      const samples=kind==='pm'?(pm||[]).filter(p=>numeric(p.value)):usableStations(stations||[]).map(s=>({...s,value:s.ipu}));
-      this.clear(kind);if(!samples.length||!districts?.length){this.status(kind,t('unavailable'));continue;}
+      const samples=kind==='pm'?(pm||[]).filter(p=>numeric(p.value)):usableStations(stations||[],referenceMs).map(s=>({...s,value:s.ipu}));
+      this.clear(kind);if(!samples.length||!districts?.length){this.status(kind,t('unavailable'));if(kind==='ipuGrid')document.getElementById('cv').textContent=t('unavailable');continue;}
       this.status(kind,t('loading'));this.compute(kind,samples,districts,options);
     }
     this.legend();
   }
   compute(kind,samples,features,options){
+    if(kind==='ipuGrid')document.getElementById('cv').textContent=t('loading');
     const token=++this.jobs;this.rasterToken[kind]=token;
     const worker=new Worker(new URL('./raster-worker.js',import.meta.url),{type:'module'});
     const timeout=setTimeout(()=>{worker.terminate();if(this.rasterToken[kind]===token)this.status(kind,t('unavailable'));},45000);
@@ -59,7 +61,7 @@ export class Layers{
     worker.onmessage=({data:d})=>{clearTimeout(timeout);worker.terminate();if(this.rasterToken[kind]!==token||!this.active[kind])return;if(d.error){this.status(kind,t('unavailable'));return;}
       this.groups[kind]=L.layerGroup(d.parts.map(p=>L.imageOverlay(rasterImage(p,features,kind),[[p.bounds[1],p.bounds[0]],[p.bounds[3],p.bounds[2]]],{pane:'raster',interactive:false,opacity:kind==='pm'?.8:.7}))).addTo(this.map);
       const count=d.parts.flatMap(p=>p.values).filter(numeric).length;this.status(kind,count?`${t('estimated')} · ${samples.length} ${kind==='pm'?'CAMS':'JAS'}`:t('noNearby'));
-      if(d.cv)document.getElementById('cv').textContent=`${t('cv')} · n=${d.cv.n}/${d.cv.total} · RMSE ${d.cv.rmse?.toFixed(1)??'—'} · MAE ${d.cv.mae?.toFixed(1)??'—'} IPU. ${t('cvNote')}`;
+      if(d.cv)document.getElementById('cv').textContent=`${t('cv')} · n=${d.cv.n}/${d.cv.total} · RMSE ${d.cv.rmse?.toFixed(1)??'N/A'} · MAE ${d.cv.mae?.toFixed(1)??'N/A'} IPU. ${t('cvNote')}`;
     };
     worker.postMessage({id:token,samples,features,power:options.power,radiusKm:options.radiusKm,cellKm:options.cellKm,cv:kind==='ipuGrid'});
   }
