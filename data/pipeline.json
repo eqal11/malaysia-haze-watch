@@ -1,0 +1,1 @@
+{"version":1,"event":"workflow_dispatch","run_url":"https://github.com/eqal11/malaysia-haze-watch/actions/runs/39696319088","started_at":"2026-10-21T23:54:13.357068Z","finished_at":"2026-10-21T23:54:36.329328Z","status":"ok","steps":{"archive_before":"ok","ipu":"ok","hotspots":"ok","archive_after":"ok","land_context":"ok","validate":"ok"},"last_scheduled_success":null}
