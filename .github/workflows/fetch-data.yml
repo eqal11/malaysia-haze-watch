@@ -1,0 +1,78 @@
+name: Refresh environmental data
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch latest environmental data
+        id: fetch
+        continue-on-error: true
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+        run: python scripts/update.py
+
+      - name: Validate data
+        run: python scripts/validate_data.py
+
+      - name: Save updated data
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: refresh environmental snapshots'
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - name: Prepare website
+        run: |
+          mkdir _site
+          cp index.html LICENSE README.md _site/
+          cp -r css js data assets _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publish updated website
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Report upstream failure
+        if: steps.fetch.outcome == 'failure'
+        run: |
+          echo 'A source failed. Last good data and failure status were retained.'
+          exit 1
