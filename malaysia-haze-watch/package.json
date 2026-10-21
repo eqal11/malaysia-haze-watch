@@ -1,0 +1,1 @@
+{"name":"malaysia-haze-watch","private":true,"version":"1.0.0","type":"module","scripts":{"test":"node tests/test.mjs","serve":"node scripts/serve.mjs"}}
