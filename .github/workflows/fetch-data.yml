@@ -55,6 +55,8 @@ jobs:
           node tests/history.mjs
           node tests/land-context.mjs
           node tests/live.mjs
+          node tests/fires.mjs
+          node tests/footprints.mjs
           python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Fetch latest environmental data
@@ -82,7 +84,7 @@ jobs:
       - name: Prepare website
         run: |
           mkdir _site
-          cp index.html LICENSE *.md _site/
+          cp *.html LICENSE *.md _site/
           cp -r css js data assets _site/
 
       - uses: actions/upload-pages-artifact@v3
