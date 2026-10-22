@@ -24,7 +24,7 @@ class LiveTests(unittest.TestCase):
                 self.assertFalse(fetch_ipu.main());self.assertEqual(target.read_text(),'last good');self.assertFalse(status.call_args.args[1])
 
     def run_pipeline(self,folder,source_ok,event):
-        with patch.object(refresh_live,'DATA',Path(folder)),patch.object(refresh_live.archive_data,'capture'),patch.object(refresh_live.fetch_ipu,'main',return_value=source_ok),patch.object(refresh_live.fetch_firms,'main',return_value=True),patch.object(attribute_hotspots,'main',return_value=True),patch.object(validate_data,'main'),patch.dict(os.environ,{'GITHUB_EVENT_NAME':event}):
+        with patch.object(refresh_live,'DATA',Path(folder)),patch.object(refresh_live.archive_data,'capture'),patch.object(refresh_live.fetch_ipu,'main',return_value=source_ok),patch.object(refresh_live.fetch_firms,'main',return_value=True),patch.object(attribute_hotspots,'main',return_value=True),patch.object(refresh_live.classify_fires,'main',return_value=True),patch.object(validate_data,'main'),patch.dict(os.environ,{'GITHUB_EVENT_NAME':event}):
             return refresh_live.main()
 
     def test_partial_failure_never_promotes_a_scheduled_success(self):

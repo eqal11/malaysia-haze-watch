@@ -1,26 +1,24 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "MHW_NODE=node.exe"
 where node.exe >nul 2>nul
 if errorlevel 1 (
-  if exist "%ProgramFiles%\nodejs\node.exe" (
-    set "MHW_NODE=%ProgramFiles%\nodejs\node.exe"
-  ) else (
-    echo Node.js tidak dijumpai / Node.js was not found.
-    echo Pasang Node.js daripada https://nodejs.org kemudian cuba semula.
-    pause
-    exit /b 1
-  )
+  echo Install Node.js from https://nodejs.org/ and run this file again.
+  pause
+  exit /b 1
 )
+call SETUP-LOCAL.bat
+if errorlevel 1 (
+  echo Setup failed. No automatic update has been claimed.
+  pause
+  exit /b 1
+)
+set "MHW_PYTHON=%CD%\.venv\Scripts\python.exe"
 echo.
-echo Malaysia Haze Watch - ujian tempatan / local preview
+echo Malaysia Haze Watch - automatic local collection
+echo Open http://127.0.0.1:4177/
+echo Data is collected immediately and every 15 minutes while this window is open.
+echo Closing this window stops local collection. GitHub Pages is a separate deployment.
 echo.
-echo Selepas mesej Local muncul, buka alamat ini dalam Chrome atau Edge:
-echo http://127.0.0.1:4173
-echo.
-echo Biarkan tetingkap ini terbuka sepanjang ujian.
-echo Tekan Ctrl+C atau tutup tetingkap untuk menghentikan pelayan.
-echo.
-"%MHW_NODE%" scripts\serve.mjs
+node scripts\serve.mjs
 if errorlevel 1 pause

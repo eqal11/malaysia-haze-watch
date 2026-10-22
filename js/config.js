@@ -5,7 +5,7 @@ export const CONFIG = Object.freeze({
   stationMaxAgeHours:6,
   idw:{power:2,cellKm:15,radiusKm:200},
   risk:{highFrp:50,mediumFrp:10,highConfidence:'high',mediumConfidence:'nominal'},
-  endpoints:{ipu:'data/ipu.json',hotspots:'data/hotspots.geojson',hotspotsAttributed:'data/hotspots_attributed.geojson',meta:'data/meta.json',pipeline:'data/pipeline.json',
+  endpoints:{fireConfig:'data/fire-config.json',fireEvents:'data/fire_events.geojson',forestFires:'data/forest_fires.geojson',ipu:'data/ipu.json',hotspots:'data/hotspots.geojson',hotspotsAttributed:'data/hotspots_attributed.geojson',meta:'data/meta.json',pipeline:'data/pipeline.json',
     districts:'data/boundaries/districts.geojson',states:'data/boundaries/states.geojson',
     land:'data/boundaries/malaysia.geojson',grid:'data/sampling-grid.json',
     pm:'https://air-quality-api.open-meteo.com/v1/air-quality',wind:'https://api.open-meteo.com/v1/forecast'},

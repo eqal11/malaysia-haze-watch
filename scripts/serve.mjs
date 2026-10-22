@@ -1,6 +1,6 @@
 import {findPython,LocalCollector} from './local-collector.mjs';
 import {createStaticServer} from './static-server.mjs';
-const root=process.cwd(),port=Number(process.env.PORT||4176);
+const root=process.cwd(),port=Number(process.env.PORT||4177);
 const collector=new LocalCollector({root,python:findPython(root)});
 const server=createStaticServer({root,collector});
 server.listen(port,'127.0.0.1',()=>{

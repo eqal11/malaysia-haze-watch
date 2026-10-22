@@ -1,1 +1,10 @@
-{"name":"malaysia-haze-watch","private":true,"version":"2.2.0","type":"module","scripts":{"test":"node tests/test.mjs && node tests/history.mjs && node tests/land-context.mjs && node tests/live.mjs","serve":"node scripts/serve.mjs"}}
+{
+  "name": "malaysia-haze-watch",
+  "private": true,
+  "version": "2.3.1",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/test.mjs && node tests/history.mjs && node tests/land-context.mjs && node tests/live.mjs && node tests/fires.mjs && node tests/footprints.mjs",
+    "serve": "node scripts/serve.mjs"
+  }
+}

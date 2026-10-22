@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import clipping from './vendor/polygon-clipping-0.15.7.cjs';
+import {pixelCells,footprintGeometry,footprintGroups} from '../js/footprints.js';
+import {readFileSync} from 'node:fs';
+const R=6371008.8,DEG=Math.PI/180;
+const row=(x,y)=>[(x+.5)*375/R/DEG,(y+.5)*375/R/DEG];
+let count=0;const test=(name,fn)=>{fn();count++;console.log('✓ '+name);};
+test('Repeated detections in the same nominal cell do not multiply area',()=>{const p=row(30000,1000);assert.equal(pixelCells([p,p]).length,1);const out=footprintGeometry([p,p],clipping.union);assert.equal(out.cell_count,1);assert.equal(out.nominal_area_km2,.140625);assert.equal(out.geometry.coordinates.length,1);});
+test('Adjacent cells dissolve their shared edge into one valid rectangle',()=>{const out=footprintGeometry([row(30000,1000),row(30001,1000)],clipping.union);assert.equal(out.geometry.type,'MultiPolygon');assert.equal(out.geometry.coordinates.length,1);assert.equal(out.geometry.coordinates[0][0].length,5);assert.equal(out.nominal_area_km2,.28125);assert.deepEqual(out.geometry.coordinates[0][0][0],out.geometry.coordinates[0][0].at(-1));});
+test('Distant detections stay separate; no invented convex-hull bridge',()=>{const out=footprintGeometry([row(30000,1000),row(30005,1000)],clipping.union);assert.equal(out.geometry.coordinates.length,2);});
+test('A ring of detections preserves its undetected central hole',()=>{const rows=[];for(let x=0;x<3;x++)for(let y=0;y<3;y++)if(x!==1||y!==1)rows.push(row(30000+x,1000+y));const out=footprintGeometry(rows,clipping.union);assert.equal(out.geometry.coordinates.length,1);assert.equal(out.geometry.coordinates[0].length,2);assert.equal(out.cell_count,8);});
+test('Empty selection stays empty and invalid coordinates are rejected',()=>{assert.equal(footprintGeometry([],clipping.union),null);assert.throws(()=>pixelCells([[NaN,3]]));assert.throws(()=>pixelCells([[101,91]]));assert.throws(()=>pixelCells([[101,3]],0));});
+test('Group and isolated footprints retain IDs and class without claiming burned area',()=>{const fc=footprintGroups([{id:'known',event_id:'known',kind:'cluster',class:'peat',rows:[row(30000,1000)]},{id:'noise',kind:'isolated',class:'unknown',rows:[row(30005,1000)]}],clipping.union);assert.equal(fc.features[0].properties.event_id,'known');assert.equal(fc.features[1].properties.event_id,null);assert.ok(!('burn_confirmed' in fc.features[0].properties));assert.ok(fc.features.every(f=>f.geometry.coordinates.flat(2).every(([lng,lat])=>Number.isFinite(lng)&&Math.abs(lng)<=180&&Number.isFinite(lat)&&Math.abs(lat)<=90)));});
+test('Actual archived detections produce bounded WGS84 footprints',()=>{const doc=JSON.parse(readFileSync(new URL('../data/fire_events.geojson',import.meta.url)));const rows=doc.features[0]?.properties.detections||doc.unclustered.slice(0,2),out=footprintGeometry(rows,clipping.union);assert.ok(out.cell_count<=rows.length);assert.ok(out.geometry.coordinates.length>0);});
+console.log(`${count} footprint test groups passed`);

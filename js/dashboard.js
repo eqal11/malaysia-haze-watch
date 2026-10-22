@@ -4,7 +4,7 @@ import {summarizeContext} from './land-context.js';
 import {category,numeric,meanWind,usableStations,stateMatches} from './core.js';
 import {t,lang,time,esc} from './i18n.js';
 let chartPromise;
-function chartLibrary(){if(!chartPromise)chartPromise=new Promise((resolve,reject)=>{if(window.Chart)return resolve(window.Chart);const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js';script.crossOrigin='anonymous';script.onload=()=>resolve(window.Chart);script.onerror=()=>reject(Error('Chart.js CDN unavailable'));document.head.appendChild(script);});return chartPromise;}
+export function chartLibrary(){if(!chartPromise)chartPromise=new Promise((resolve,reject)=>{if(window.Chart)return resolve(window.Chart);const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js';script.crossOrigin='anonymous';script.onload=()=>resolve(window.Chart);script.onerror=()=>reject(Error('Chart.js CDN unavailable'));document.head.appendChild(script);});return chartPromise;}
 export class Dashboard{
   constructor(onSelect){this.charts={};this.selected=null;this.sort='ipu';this.direction=-1;this.select=onSelect;this.chartVersion=0;
     document.getElementById('search').oninput=()=>this.table();document.getElementById('table-mode').onchange=()=>this.table();

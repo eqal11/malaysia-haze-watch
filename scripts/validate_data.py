@@ -10,6 +10,12 @@ def main():
         from attribute_hotspots import validate_attributed
         validate_attributed(read(attributed))
     ipu = validate_ipu(read(DATA/'ipu.json'))
+    fires=DATA/'fire_events.geojson'
+    if fires.exists():
+        from classify_fires import validate_events,CLASSES
+        events=validate_events(read(fires));forest=validate_geojson(read(DATA/'forest_fires.geojson'))
+        if events['analysis_id']!=forest['analysis_id']:raise ValueError('Fire product generation mismatch')
+        if any(f['properties'].get('fire_class') not in CLASSES for f in forest['features']):raise ValueError('Invalid fire class')
     for path in (DATA/'boundaries').glob('*.geojson'):
         validate_geojson(read(path))
     if (DATA/'boundaries/districts.geojson').stat().st_size > 3_000_000:

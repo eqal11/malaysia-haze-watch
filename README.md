@@ -1,10 +1,56 @@
-# Malaysia Haze Watch
+# Malaysia Haze Watch · Fire detection analysis
+
+**Version 2.3.1 local review:** adds NASA GIBS imagery, tree-cover/peat context classification, DBSCAN groups, seven-day replay and fire analytics. Start with [FIRE-ANALYSIS.md](FIRE-ANALYSIS.md). Existing GitHub Pages and cron-job.org settings have not been changed by this local development. Preview: http://127.0.0.1:4177/.
 
 A buildless, browser-only Web GIS for Malaysian haze monitoring. It combines official DOE station IPU observations, explicitly labelled district estimates, CAMS PM2.5, surface wind and NASA VIIRS hotspots. No application server, database, paid hosting or frontend secrets.
 
-**Live demo:** deployment pending — after enabling Pages, your URL is `https://<your-github-username>.github.io/<your-repository>/`. This is the only intentional deployment placeholder; no data is simulated.
+**Existing live site:** [eqal11.github.io/malaysia-haze-watch](https://eqal11.github.io/malaysia-haze-watch/). That deployment remains the previous version until these changes are uploaded. Local version 2.3: `http://127.0.0.1:4177/`.
+
+## Visual sources and methodology
+
+The navigation now opens [the bilingual visual guide](methodology.html): a collection-to-map flowchart, source and licence cards, analysis methods, detection-footprint illustration, update timing and interpretation limits. Technical documentation remains available here.
+
+## Detection footprint polygons
+
+Independent point and polygon checkboxes are available in the fire layer. Polygons dissolve unique nominal 375 m grid cells containing selected detections, preserving holes and gaps. They are **not confirmed burned-area boundaries**. Calculations run in a Web Worker using pinned MIT polygon-clipping 0.15.7, loaded only on demand. No new source observations, credentials or backend are required. See [POLYGONS.md](POLYGONS.md) for use, method and tests.
+
+## Kebakaran hutan: heat detections in forested areas
+
+Tree cover is labelled **Tutupan pokok**, never legal forest or a confirmed fire. NASA FIRMS heat anomalies do not establish the cause of haze. Popups state **Pengesanan haba, bukan bukti punca atau kawasan terbakar sebenar**.
+
+Verified NASA GIBS WMTS: `VIIRS_SNPP_CorrectedReflectance_TrueColor`, EPSG:3857, `GoogleMapsCompatible_Level9`, 256-pixel JPEG tiles, zoom 0–9, CORS `*`, no key. Client-side last-seven-UTC-days imagery has a date picker, opacity and empty/error states, including blank HTTP-200 tiles. Credit: NASA GIBS/EOSDIS/Suomi NPP VIIRS; [NASA data-use guidance](https://www.earthdata.nasa.gov/engage/open-data-services-software/data-use-policy). Existing WorldCover/PEATMAP CC BY 4.0 and geoBoundaries/OSM ODbL notices remain applicable.
+
+`scripts/classify_fires.py` uses existing land cover and peat context. Peat takes display precedence; original cover is preserved. Haversine DBSCAN defaults to 3 km, min_samples 2 and a 24h neighbour time gate, configurable in `data/fire-config.json`. No FRP cutoff discards smouldering peat detections. Outputs `forest_fires.geojson` and `fire_events.geojson` each stay under 5 MB. Noise is retained. The existing collector invokes analysis after attribution, retaining good files on failure and committing changes only.
+
+Includes map circles, country/province/class/time/persistence filters, seven-day playback, province/class chart, 7/30-day archive trend, sortable top-10 groups and Malaysia/Indonesia counts. Persistence is distinct observed MYT days. Nominal unique 375 m cells give an approximate detection footprint, **not burned area**. Clouds, overpass gaps, dated land/peat maps, incomplete archives and changing group membership limit interpretation. No WDPA or Sentinel-2 dNBR confirmation is enabled; burn_confirmed remains null. See [full method, verified tile URL and upgrade instructions](FIRE-ANALYSIS.md) and [verification](FIRE-VERIFICATION.md).
+
+## Hotspot land context
+
+FIRMS detects heat anomalies. This analysis describes **land context**, not ignition mechanisms, ownership, responsibility or proof of a fire. Every attributed point has `on_peat` (boolean/null), `landcover` (string/null), `country` and `admin1` (string/null). Missing coverage remains null. The popup states: **Konteks tanah sahaja, bukan bukti punca kebakaran**.
+
+| Input verified and downloaded | Format and licence | Bundled analysis input |
+|---|---|---|
+| [PEATMAP, University of Leeds, doi:10.5518/252](https://archive.researchdata.leeds.ac.uk/251/), [actual Asia ZIP](https://archive.researchdata.leeds.ac.uk/251/5/Asia.zip) | Shapefile, CC BY 4.0; ZIP MD5 `8893f779db40ecc53b19e66518230753` | `Asia/SEA_Peatland.shp`, inspected fields `Id`, `AREA`; original CRS ESRI:54034. Reprojected, repaired component-by-component, clipped to 95,-5,120,8, topology-preserving simplification 25 m in EPSG:6933, WGS84 GeoJSON precision 0.000001°. 3,659 valid polygons, about 3.87 MB. |
+| [ESA WorldCover 2021 v200](https://doi.org/10.5281/zenodo.7254221), [official product manual and licence](https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/docs/WorldCover_PUM_V2.0.pdf) | Categorical COG GeoTIFF, CC BY 4.0 | 39 actual AWS map tiles from the official grid. Supplied level-64 overviews, clipped and nearest-resampled to 0.006° (about 667 m at the equator), 271 KB. **Not native 10 m.** Actual numeric map codes, not RGB map tiles. |
+| [geoBoundaries gbOpen Indonesia ADM1](https://www.geoboundaries.org/api/current/gbOpen/IDN/ADM1/) and existing Malaysia ADM1 | GeoJSON, ODbL 1.0, underlying OpenStreetMap / Wambacher | Actual `shapeName`/`shapeGroup` fields inspected for Indonesia; existing `name` for Malaysia. Boundaries represent 2017. No nearest-province guesses. |
+
+**Method:** `scripts/attribute_hotspots.py` uses GeoPandas `sjoin(..., predicate="intersects")` for detection centres against peat and ADM1 polygons, plus Rasterio categorical sampling for cover. Exact peat polygon edges count as inside. Conflicting province matches become null. `on_peat=false` means outside mapped peat within an identified Malaysia/Indonesia polygon in the study extent; outside that known coverage is null. Existing detection coordinates, time, confidence and FRP are preserved. WorldCover tree cover can include plantations; it does not identify an operator or a particular crop.
+
+**Updates and failure handling:** reference inputs are precomputed once, not downloaded every cron. The existing 30-minute Actions workflow fetches FIRMS, attributes detections, enriches available daily archives, validates and commits only changed data, then deploys. Each data file is limited to 5,000,000 bytes. Failed attribution preserves the last good output and records status in `meta.json`. The browser prefers a matching `hotspots_attributed.geojson`; if absent, invalid or mismatched with current raw detections, it uses `hotspots.geojson` with unknown context. Peat-only filtering uses strictly `true`. The stacked province chart includes mapped peat, outside mapped peat and unknown, follows map filters and selected 6/24/48-hour window, and counts detections rather than distinct fire events. Existing KPI and hourly charts retain their labelled 24h/48h windows.
+
+**Limitations:** peat inputs represent Malaysia 2002–2009 and Indonesia 2005–2010, compiled in PEATMAP 2017; WorldCover represents 2021. They do not establish 2026 conditions. Point centres and polygon boundaries have positional error; simplification adds a 25 m tolerance in the stated projection. VIIRS nominal resolution is 375 m at nadir and varies with scan position, while this compact cover grid is about 667 m. Coastal gaps, unrecorded peat and land-cover classification errors are possible. Outside mapped peat does not prove peat absent. Historical detections use these same dated land reference layers, not a reconstructed daily land-cover map. No complete January 2026 FIRMS/IPU backfill has been fabricated.
+
+**Attribution:** Xu, Morris, Liu and Holden (2017), University of Leeds, doi:10.5518/252. © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium. © OpenStreetMap contributors; geoBoundaries. See [data/context/LICENSES.md](data/context/LICENSES.md) and [sources.json](data/context/sources.json) for licences, every tile URL, checked fields and input checksums. Application code is MIT; derived attributed databases are ODbL 1.0 with source notices retained.
 
 ## Screenshots
+
+Version 2.3: [fire map](assets/screenshots/fire-map.png), [fire dashboard](assets/screenshots/fire-dashboard.png), [mobile](assets/screenshots/fire-mobile.png).
+
+
+
+
+
+Version 2.1: [land context chart](assets/screenshots/land-context-chart.jpg), [hotspot popup](assets/screenshots/land-context-popup.jpg), [mobile context chart](assets/screenshots/land-context-mobile.jpg).
 
 Desktop and mobile screenshots from the local static-site verification are in [`assets/screenshots/`](assets/screenshots/). They show real source snapshots; values will change. See [`VERIFICATION.md`](VERIFICATION.md) for test evidence and deployment limits.
 
@@ -17,28 +63,31 @@ Desktop and mobile screenshots from the local static-site verification are in [`
 1. Create a public GitHub repository, or fork this project. Put this directory's contents at the repository root, on the `main` branch.
 2. In **Settings → Secrets and variables → Actions**, add `FIRMS_MAP_KEY`, obtained free from [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/api/map_key/). Never put the key in JS, repository files, screenshots or URLs in logs. If no key is set, the fetcher uses NASA's official public 48h CSV and identifies that transport in source status. An invalid configured key causes a visible failure and preserves the last good file; it is not silently ignored.
 3. Enable Actions on the fork. Repository settings must allow the data job to write repository contents; its job-scoped token uses `contents: write`. Other jobs have only their required permissions. Branch protection must permit the bot's data commits, or adapt the workflow to a bot PR process.
-4. Run **Refresh environmental data** manually. It then runs at minutes 17 and 47 each hour (UTC). GitHub schedules can be delayed; inactive public-repository schedules may be disabled by GitHub. Check the Actions page when freshness alerts appear.
+4. Run **Refresh environmental data** manually. It then runs at minutes 11 and 41 each hour (UTC). GitHub schedules can be delayed; inactive public-repository schedules may be disabled by GitHub. Check the Actions page when freshness alerts appear.
 5. In **Settings → Pages**, choose **GitHub Actions** as the source. Run **Deploy static Pages**, or push to `main`.
 6. Open the deployment URL shown by the Pages job. There is no frontend install or build step.
 
-`GITHUB_TOKEN` data commits do not trigger ordinary push workflows. The separate Pages workflow therefore also responds to completion of the data workflow and checks out the latest `main`. It deploys retained good snapshots plus failure metadata even when an upstream fetch failed. Deploy artifacts contain only public HTML, CSS, JS, data and assets.
+`GITHUB_TOKEN` data commits do not trigger ordinary push workflows. The existing data workflow therefore refreshes and deploys in the same job. The separate Pages workflow still handles human code pushes and manual deployment. Retained good snapshots and failure metadata are published before an upstream or attribution failure is surfaced. Deploy artifacts contain only public HTML, CSS, JS, data and assets.
 
 ### Local development
 
-Requires Node 20+ for the convenience server/test runner and Python 3.10+ for ingestion. No Python packages or frontend npm dependencies are required.
+Node 22+ runs the convenience server and frontend tests. Python 3.12 and the pinned `scripts/requirements-context.txt` packages run GIS attribution and validation. The frontend has no build step or npm dependencies, and the local collector requires Python and GIS packages. SETUP-LOCAL.bat installs them in a project virtual environment.
 
-**Windows:** extract the complete ZIP, open the project directory and double-click `RUN-LOCAL.bat`. Leave its console window open, then visit `http://127.0.0.1:4173` in Chrome or Edge. Do not double-click `index.html`; `file://` blocks the modules/data loading required by this application. Internet access is required for CDN libraries, OSM tiles and model APIs. Closing the server window stops the local site. Local testing does not publish the project to the internet.
+**Windows:** extract the complete ZIP, open the project directory and double-click `RUN-LOCAL.bat`. Leave its console window open, then visit `http://127.0.0.1:4177` in Chrome or Edge. Do not double-click `index.html`; `file://` blocks the modules/data loading required by this application. Internet access is required for CDN libraries, OSM tiles and model APIs. Closing the server window stops the local site. Local testing does not publish the project to the internet.
 
 ```sh
 node scripts/serve.mjs
-# Open http://127.0.0.1:4173 — ES modules cannot run correctly from file://.
-node tests/test.mjs
+# Open http://127.0.0.1:4177; ES modules require HTTP.
+python -m pip install -r scripts/requirements-context.txt
+npm test
 python -m unittest discover -s tests -p 'test_*.py' -v
 python scripts/validate_data.py
-python scripts/update.py
+python scripts/refresh_live.py
 ```
 
-The last command returns a failure status when a source fails, after updating source health. It keeps previous good files. `serve.mjs` is only a development utility; GitHub Pages hosts the production static files.
+The local server collects immediately, then 15 minutes after each completed attempt. The browser reloads snapshots every five minutes, with model calls cached for one hour. Closing the server stops local collection. GitHub Actions supplies production updates separately.
+
+The ingestion and attribution commands return a failure status when a source or processing step fails, after updating source health. They keep previous good files. `serve.mjs` is only a development utility; GitHub Pages hosts the production static files.
 
 ## Verified data sources and final endpoints
 
@@ -147,6 +196,8 @@ ADM2 is about **402 KB**, below the requested 3 MB budget. Boundary downloads us
 │   ├── i18n.js
 │   ├── idw.js
 │   ├── layers.js
+│   ├── land-context.js
+│   ├── history.js
 │   ├── map.js
 │   ├── raster-worker.js
 │   └── wind.js
@@ -155,6 +206,9 @@ ADM2 is about **402 KB**, below the requested 3 MB budget. Boundary downloads us
 │   ├── boundaries/sources.json
 │   ├── ipu.json
 │   ├── hotspots.geojson
+│   ├── hotspots_attributed.geojson
+│   ├── context/{peat.geojson,indonesia-admin1.geojson,worldcover-2021.tif,sources.json,LICENSES.md}
+│   ├── archive/{index.json,ipu/,hotspots/}
 │   ├── meta.json
 │   └── sampling-grid.json
 ├── scripts/
@@ -162,11 +216,17 @@ ADM2 is about **402 KB**, below the requested 3 MB budget. Boundary downloads us
 │   ├── build_grid.py
 │   ├── fetch_ipu.py
 │   ├── fetch_firms.py
+│   ├── attribute_hotspots.py
+│   ├── prepare_land_context.py
+│   ├── requirements-context.txt
+│   ├── archive_data.py
+│   ├── bootstrap_recent.py
+│   ├── import_history.py
 │   ├── update.py
 │   ├── utils.py
 │   ├── validate_data.py
 │   └── serve.mjs
-├── tests/{test.mjs,test_ingestion.py}
+├── tests/{test.mjs,history.mjs,land-context.mjs,test_ingestion.py,test_archive.py,test_land_context.py}
 ├── index.html
 ├── RUN-LOCAL.bat
 ├── package.json

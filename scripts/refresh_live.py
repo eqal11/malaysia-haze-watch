@@ -8,6 +8,7 @@ from utils import DATA, now, read, write, status
 import fetch_ipu
 import fetch_firms
 import archive_data
+import classify_fires
 
 def main():
     previous=read(DATA/'pipeline.json',{})
@@ -35,6 +36,7 @@ def main():
             return False
         return attribute_hotspots.main(archives=True)
     step('land_context',context)
+    step('fires',classify_fires.main)
     def validate():
         import validate_data
         validate_data.main()

@@ -1,4 +1,5 @@
 import {stationSummary,pipelineEventLabel} from './freshness.js';
+import {FireExplorer} from './fire-explorer.js';
 import {CONFIG} from './config.js';
 import {stateMatches} from './core.js';
 import {staticData,modelData,getJSON} from './data.js';
@@ -7,7 +8,7 @@ import {createMap,message} from './map.js';
 import {Dashboard} from './dashboard.js';
 import {setLang,t,lang,time,esc} from './i18n.js';
 import {HOUR,malaysiaDate,selectionTime,loadArchive,clearArchiveMemory} from './history.js';
-let map,layers,snapshot={},models={},state='',options={...CONFIG.idw},busy=false;
+let map,layers,fires,snapshot={},models={},state='',options={...CONFIG.idw},busy=false;
 let localHealth=null,localRefreshRunning=false;
 const localPreview=['localhost','127.0.0.1','::1'].includes(location.hostname);
 let mode='live',selectedTime=null,archive={errors:{}},manifest={days:{}},selectionRevision=0;
@@ -55,7 +56,7 @@ function render(){
   const pm=modelSources.pm?.points?.filter(p=>stateMatches(p.state,state)),wind=modelSources.wind?.points?.filter(p=>stateMatches(p.state,state));
   const model={districts,stations,hotspots,hot24,hot48,pm,wind,options:temporalOptions,state,hasIPU:!!ipu,history:ipu?.history||[],hotUpdated:hot?.updated_at,referenceMs,historical,hotPartial:historical&&hot&&!hot.coverage_complete};
   const contextMissing=!hot?.land_context&&!historical||hot?.context_error||historical&&allHot?.some(f=>!('on_peat' in f.properties));const health=snapshot.meta?.data?.sources?.land_context,retained=!historical&&(health?.status==='unavailable'||hot?.context_raw_unavailable);document.getElementById('context-status').textContent=(!hot?t('unavailable'):contextMissing?t('contextMissing'):retained?t('contextRetained'):t('contextReady'))+(historical?'':` ${t('lastGood')}: ${time(health?.last_success)}.`);
-  layers?.render(model).catch(()=>message(t('unavailable')));dashboard.update(model);sourceStatus();freshnessStatus();document.querySelector('.timeline').classList.toggle('is-history',historical);
+  layers?.render(model).catch(()=>message(t('unavailable')));dashboard.update(model);fires?.setContext(state,referenceMs,historical,hot?.updated_at,snapshot.meta?.data?.sources?.fires);sourceStatus();freshnessStatus();document.querySelector('.timeline').classList.toggle('is-history',historical);
   document.getElementById('history-status').textContent=historical?`${t('archive')} · ${time(selectedTime)}${Object.keys(archive.errors||{}).length?' · '+t('partial'):''}`:`${t('live')} · ${time(ipu?.updated_at)}`;
 }
 function clock(){document.getElementById('clock').textContent=t('deviceClock')+': '+time(new Date().toISOString());document.getElementById('history-date').max=malaysiaDate(Date.now());}
@@ -75,6 +76,7 @@ async function showHistory(){
 }
 setLang('bm');clock();const initial=Date.now()-HOUR;document.getElementById('history-date').value=malaysiaDate(initial);document.getElementById('history-hour').innerHTML=Array.from({length:24},(_,i)=>`<option value="${i}">${String(i).padStart(2,'0')}:00</option>`).join('');document.getElementById('history-hour').value=String(new Date(initial+8*HOUR).getUTCHours());
 try{map=createMap();layers=new Layers(map,layerStatus,id=>dashboard.choose(id));}catch{message(t('unavailable')+' · Leaflet CDN',true);}controls();
+if(map){try{fires=new FireExplorer(map);}catch{document.getElementById('fire-analysis').textContent=t('fireError');}}else document.getElementById('fire-analysis').textContent=t('fireError');
 document.getElementById('language').onclick=()=>{setLang(lang==='bm'?'en':'bm');document.getElementById('language').innerHTML=lang==='bm'?'BM <span>/ EN</span>':'EN <span>/ BM</span>';controls();clock();render();};
 document.getElementById('state').onchange=e=>{state=e.target.value;render();if(map){const f=snapshot.states?.data?.features.find(f=>f.properties.name===state);if(f)map.fitBounds(L.geoJSON(f).getBounds(),{padding:[25,25]});else map.fitBounds(CONFIG.bounds);}};
 for(const id of ['region','window','peat-only'])document.getElementById(id).onchange=render;
